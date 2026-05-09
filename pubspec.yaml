@@ -1,0 +1,39 @@
+name: spacebook
+description: SpaceBook lister dashboard
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.5.0
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+  go_router: ^13.2.0
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  image_picker: ^1.1.2
+  intl: ^0.19.0
+  google_fonts: ^8.0.2
+  iconsax: ^0.0.8
+  flutter_google_places_sdk: ^0.4.0
+  js: ^0.6.7
+  http: ^1.2.0
+  file_picker: ^6.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.8
+  freezed: ^2.5.2
+  json_serializable: ^6.7.1
+  riverpod_generator: ^2.4.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
