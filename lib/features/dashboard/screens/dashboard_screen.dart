@@ -1,7 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:spacebook/features/dashboard/screens/settings_screen.dart';
+import 'package:spacebook/features/dashboard/screens/support_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_colors.dart';
+import 'list_space_screen.dart';
 import 'my_spaces_screen.dart';
+import 'edit_space_screen.dart';
+
+final dashboardIndexProvider = StateProvider<int>((_) => 1);
+final editSpaceIdProvider = StateProvider<String?>((_) => null);
+
+final currentProfileProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return null;
+  final response = await Supabase.instance.client
+      .from('profiles')
+      .select()
+      .eq('id', user.id)
+      .single();
+  return response;
+});
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -10,8 +30,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
   ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends ConsumerState<DashboardScreen> {
-  int _selectedIndex = 1;
+class _DashboardScreenState extends ConsumerState<DashboardScreen>
+    with TickerProviderStateMixin {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final _navItems = const [
@@ -23,6 +43,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final selectedIndex = ref.watch(dashboardIndexProvider);
+    final profile = ref.watch(currentProfileProvider);
+    final name = profile.value?['full_name'] ?? 'SpaceBook User';
+    final email = profile.value?['email'] ??
+        Supabase.instance.client.auth.currentUser?.email ??
+        '';
     final isMobile = MediaQuery.of(context).size.width < 768;
 
     return Scaffold(
@@ -31,11 +57,62 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       drawer: isMobile
           ? Drawer(
               child: _SidebarContent(
-                selectedIndex: _selectedIndex,
+                selectedIndex: selectedIndex,
                 navItems: _navItems,
+                name: name,
+                email: email,
                 onItemTap: (i) {
-                  setState(() => _selectedIndex = i);
+                  ref.read(dashboardIndexProvider.notifier).state = i;
                   _scaffoldKey.currentState?.closeDrawer();
+                },
+                onSupportTap: () {
+                  ref.read(dashboardIndexProvider.notifier).state = 8;
+                  _scaffoldKey.currentState?.closeDrawer();
+                },
+                onLogOut: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      title: const Text('Log Out',
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary)),
+                      content: const Text('Are you sure you want to log out?',
+                          style: TextStyle(
+                              fontSize: 14, color: AppColors.textSecondary)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel',
+                              style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                          ),
+                          child: const Text('Yes, Log Out',
+                              style: TextStyle(fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true && context.mounted) {
+                    await Supabase.instance.client.auth.signOut();
+                    if (context.mounted) {
+                      Navigator.of(context)
+                          .pushNamedAndRemoveUntil('/', (_) => false);
+                    }
+                  }
                 },
               ),
             )
@@ -44,23 +121,71 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ? Column(
               children: [
                 _buildTopBar(isMobile: true),
-                Expanded(child: _buildBody()),
+                Expanded(child: _buildBody(selectedIndex)),
               ],
             )
           : Row(
               children: [
-                // Sidebar — full height
                 _SidebarContent(
-                  selectedIndex: _selectedIndex,
+                  selectedIndex: selectedIndex,
                   navItems: _navItems,
-                  onItemTap: (i) => setState(() => _selectedIndex = i),
+                  name: name,
+                  email: email,
+                  onItemTap: (i) =>
+                      ref.read(dashboardIndexProvider.notifier).state = i,
+                  onSupportTap: () =>
+                      ref.read(dashboardIndexProvider.notifier).state = 8,
+                  onLogOut: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        title: const Text('Log Out',
+                            style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary)),
+                        content: const Text('Are you sure you want to log out?',
+                            style: TextStyle(
+                                fontSize: 14, color: AppColors.textSecondary)),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Cancel',
+                                style: TextStyle(
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            child: const Text('Yes, Log Out',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && context.mounted) {
+                      await Supabase.instance.client.auth.signOut();
+                      if (context.mounted) {
+                        Navigator.of(context)
+                            .pushNamedAndRemoveUntil('/', (_) => false);
+                      }
+                    }
+                  },
                 ),
-                // Right side — top bar + content
                 Expanded(
                   child: Column(
                     children: [
                       _buildTopBar(isMobile: false),
-                      Expanded(child: _buildBody()),
+                      Expanded(child: _buildBody(selectedIndex)),
                     ],
                   ),
                 ),
@@ -94,36 +219,56 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     letterSpacing: 0.5)),
           ],
           const Spacer(),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(8),
+          GestureDetector(
+            onTap: () => ref.read(dashboardIndexProvider.notifier).state = 7,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.settings_outlined,
+                  size: 18, color: AppColors.textSecondary),
             ),
-            child: const Icon(Icons.settings_outlined,
-                size: 18, color: AppColors.textSecondary),
           ),
           const SizedBox(width: 8),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(8),
+          GestureDetector(
+            onTap: () => ref.read(dashboardIndexProvider.notifier).state = 9,
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.border),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.notifications_outlined,
+                  size: 18, color: AppColors.textSecondary),
             ),
-            child: const Icon(Icons.notifications_outlined,
-                size: 18, color: AppColors.textSecondary),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
-    switch (_selectedIndex) {
+  Widget _buildBody(int selectedIndex) {
+    switch (selectedIndex) {
       case 1:
         return const MySpacesScreen();
+      case 5:
+        return ListSpaceScreen();
+      case 6:
+        final spaceId = ref.watch(editSpaceIdProvider);
+        return EditSpaceScreen(spaceId: spaceId);
+      case 7:
+        return const SettingsScreen();
+      case 8:
+        return const SupportScreen();
+      case 9:
+        return const Center(
+          child: Text('Notifications coming soon',
+              style: TextStyle(color: AppColors.textSecondary)),
+        );
       default:
         return const Center(
           child: Text('Coming soon',
@@ -142,12 +287,20 @@ class _NavItem {
 class _SidebarContent extends StatelessWidget {
   final int selectedIndex;
   final List<_NavItem> navItems;
+  final String name;
+  final String email;
   final ValueChanged<int> onItemTap;
+  final VoidCallback onSupportTap;
+  final VoidCallback onLogOut;
 
   const _SidebarContent({
     required this.selectedIndex,
     required this.navItems,
+    required this.name,
+    required this.email,
     required this.onItemTap,
+    required this.onSupportTap,
+    required this.onLogOut,
   });
 
   @override
@@ -160,7 +313,6 @@ class _SidebarContent extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Logo
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
@@ -190,16 +342,13 @@ class _SidebarContent extends StatelessWidget {
                     border: Border.all(color: AppColors.border),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Icon(Icons.keyboard_arrow_down,
+                  child: const Icon(Icons.keyboard_arrow_down,
                       size: 16, color: AppColors.textSecondary),
                 )
               ],
             ),
           ),
-
           const SizedBox(height: 8),
-
-          // Nav items
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -217,10 +366,7 @@ class _SidebarContent extends StatelessWidget {
               }),
             ),
           ),
-
           const Divider(color: AppColors.border, height: 1),
-
-          // Support + Logout
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Column(
@@ -228,21 +374,19 @@ class _SidebarContent extends StatelessWidget {
                 _SidebarItem(
                   icon: Icons.headset_mic_outlined,
                   label: 'Support',
-                  isActive: false,
-                  onTap: () {},
+                  isActive: selectedIndex == 8,
+                  onTap: onSupportTap,
                 ),
                 _SidebarItem(
                   icon: Icons.logout,
                   label: 'Log Out',
                   isActive: false,
                   isDestructive: true,
-                  onTap: () {},
+                  onTap: onLogOut,
                 ),
               ],
             ),
           ),
-
-          // User profile
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: const BoxDecoration(
@@ -257,18 +401,18 @@ class _SidebarContent extends StatelessWidget {
                       size: 18, color: AppColors.primary),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Daniel Ebube',
-                          style: TextStyle(
+                      Text(name,
+                          style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: AppColors.textPrimary)),
-                      Text('daniel21@gmail.com',
+                      Text(email,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
+                          style: const TextStyle(
                               fontSize: 11, color: AppColors.textSecondary)),
                     ],
                   ),

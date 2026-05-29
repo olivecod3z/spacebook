@@ -59,6 +59,7 @@ class ObSidebar extends StatelessWidget {
             label: 'KYC Verification',
             state: _itemState(6, currentStep),
           ),
+          
         ],
       ),
     );

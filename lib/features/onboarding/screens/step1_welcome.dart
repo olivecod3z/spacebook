@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spacebook/features/onboarding/widgets/dotted_background.dart';
-import 'package:spacebook/shared/navigation/app_router.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../features/auth/screens/login_screen.dart';
 import 'onboarding_screen.dart';
 
 class Step1Welcome extends ConsumerWidget {
@@ -19,7 +19,6 @@ class Step1Welcome extends ConsumerWidget {
             Stack(
               alignment: Alignment.center,
               children: [
-                // Outer circle — fades at bottom
                 ShaderMask(
                   shaderCallback: (rect) {
                     return const LinearGradient(
@@ -56,8 +55,6 @@ class Step1Welcome extends ConsumerWidget {
                     ),
                   ),
                 ),
-
-                // Inner circle — no fade, fully visible
                 Container(
                   width: 64,
                   height: 64,
@@ -80,17 +77,23 @@ class Step1Welcome extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 24),
-            const Text('Welcome To SpaceBook',
-                style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary)),
+            const Text(
+              'Welcome To SpaceBook',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
             const SizedBox(height: 12),
             const Text(
               'Turn your space into a revenue stream. List your studio, office or venue \nand start earning from the creative community in Nigeria.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 14, color: AppColors.textSecondary, height: 1.6),
+                fontSize: 14,
+                color: AppColors.textSecondary,
+                height: 1.6,
+              ),
             ),
             const SizedBox(height: 36),
             SizedBox(
@@ -102,27 +105,38 @@ class Step1Welcome extends ConsumerWidget {
                   backgroundColor: AppColors.primary,
                   foregroundColor: AppColors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                   elevation: 0,
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text("Let's Get You Started  →",
-                        style: TextStyle(
-                            fontWeight: FontWeight.w500, fontSize: 15)),
+                    Text(
+                      "Let's Get You Started  →",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-            // DEV ONLY
+            const SizedBox(height: 16),
+            // Login button
             TextButton(
-              onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
-                AppRouter.dashboard,
-                (_) => false,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
               ),
-              child: const Text('→ Skip to Dashboard',
-                  style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+              child: const Text(
+                'Already have an account? Sign in',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
             ),
           ],
         ),

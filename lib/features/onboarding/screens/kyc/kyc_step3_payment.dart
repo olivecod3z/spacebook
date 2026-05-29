@@ -4,7 +4,9 @@ import 'package:spacebook/core/constants/app_colors.dart';
 import 'package:spacebook/features/onboarding/providers/kyc_form_provider.dart';
 import 'package:spacebook/features/onboarding/screens/kyc/kyc_router.dart';
 import 'package:spacebook/features/onboarding/widgets/ob_bottom_bar.dart';
+import 'package:spacebook/repositories/kyc_repository.dart';
 import 'package:spacebook/shared/navigation/app_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class KycStep3Payment extends ConsumerStatefulWidget {
   const KycStep3Payment({super.key});
@@ -18,25 +20,63 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
   late AnimationController _animCtrl;
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
-  late TextEditingController _nameCtrl;
-  late TextEditingController _accountCtrl;
+
+  final _nameCtrl = TextEditingController();
+  final _accountCtrl = TextEditingController();
+  final _bankCtrl = TextEditingController();
+
+  List<String> _bankSuggestions = [];
+  bool _showBankSuggestions = false;
   bool _submitted = false;
 
-  static const _banks = [
+  static const _allBanks = [
     'Access Bank',
-    'First Bank',
-    'GTBank',
-    'UBA',
-    'Zenith Bank',
-    'Ecobank',
+    'Citibank Nigeria',
+    'Ecobank Nigeria',
     'Fidelity Bank',
-    'FCMB',
-    'Stanbic IBTC',
-    'Sterling Bank',
-    'Union Bank',
-    'Wema Bank',
-    'Polaris Bank',
+    'First Bank of Nigeria',
+    'First City Monument Bank (FCMB)',
+    'Globus Bank',
+    'Guaranty Trust Bank (GTBank)',
+    'Heritage Bank',
+    'Jaiz Bank',
     'Keystone Bank',
+    'Kuda Bank',
+    'Lotus Bank',
+    'Moniepoint Microfinance Bank',
+    'OPay Digital Services',
+    'PalmPay',
+    'Parallex Bank',
+    'Polaris Bank',
+    'Premium Trust Bank',
+    'Providus Bank',
+    'Rand Merchant Bank',
+    'Stanbic IBTC Bank',
+    'Standard Chartered Bank',
+    'Sterling Bank',
+    'SunTrust Bank',
+    'Taj Bank',
+    'Titan Trust Bank',
+    'Union Bank of Nigeria',
+    'United Bank for Africa (UBA)',
+    'Unity Bank',
+    'VFD Microfinance Bank',
+    'Wema Bank',
+    'Zenith Bank',
+    'Carbon (One Finance)',
+    'FairMoney Microfinance Bank',
+    'Paga',
+    'Rubies Bank',
+    'Sparkle Microfinance Bank',
+    'Accion Microfinance Bank',
+    'AB Microfinance Bank',
+    'LAPO Microfinance Bank',
+    'Renmoney Microfinance Bank',
+    'Covenant Microfinance Bank',
+    'Mint Finex MFB',
+    'Eyowo',
+    'Limelight Bank',
+    'Intellifin Microfinance Bank',
   ];
 
   static const _schedules = ['Daily', 'Weekly', 'Bi-weekly', 'Monthly'];
@@ -45,8 +85,13 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
   void initState() {
     super.initState();
     final saved = ref.read(kycFormProvider);
-    _nameCtrl = TextEditingController(text: saved.accountHolderName);
-    _accountCtrl = TextEditingController(text: saved.accountNumber);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _nameCtrl.text = saved.accountHolderName;
+        _accountCtrl.text = saved.accountNumber;
+        _bankCtrl.text = saved.bank ?? '';
+      }
+    });
     _animCtrl = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 400));
     _slideAnim = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
@@ -61,24 +106,92 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
     _animCtrl.dispose();
     _nameCtrl.dispose();
     _accountCtrl.dispose();
+    _bankCtrl.dispose();
     super.dispose();
   }
 
-  void _submit() {
+  void _onBankChanged(String value) {
+    setState(() {
+      if (value.isEmpty) {
+        _bankSuggestions = [];
+        _showBankSuggestions = false;
+      } else {
+        _bankSuggestions = _allBanks
+            .where((b) => b.toLowerCase().contains(value.toLowerCase()))
+            .toList();
+        _showBankSuggestions = _bankSuggestions.isNotEmpty;
+      }
+    });
+    ref.read(kycFormProvider.notifier).updatePayment(bank: value);
+  }
+
+  void _selectBank(String bank) {
+    _bankCtrl.text = bank;
+    ref.read(kycFormProvider.notifier).updatePayment(bank: bank);
+    setState(() {
+      _showBankSuggestions = false;
+      _bankSuggestions = [];
+    });
+  }
+
+  Future<void> _submit() async {
     setState(() => _submitted = true);
     final form = ref.read(kycFormProvider);
     if (_nameCtrl.text.isEmpty ||
         _accountCtrl.text.isEmpty ||
-        form.bank == null ||
+        _bankCtrl.text.isEmpty ||
         form.payoutSchedule == null) return;
+
     ref.read(kycFormProvider.notifier).updatePayment(
           accountHolderName: _nameCtrl.text,
           accountNumber: _accountCtrl.text,
+          bank: _bankCtrl.text,
         );
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRouter.dashboard,
-      (_) => false,
-    );
+
+    final updatedForm = ref.read(kycFormProvider);
+
+    try {
+      await ref.read(kycRepositoryProvider).submitKyc(
+            idType: updatedForm.idType ?? '',
+            idNumber: updatedForm.idNumber,
+            idFileBytes: updatedForm.idFileBytes,
+            idFileName: updatedForm.idFileName,
+            streetAddress: updatedForm.streetAddress,
+            city: updatedForm.city ?? '',
+            state: updatedForm.state ?? '',
+            zipCode: updatedForm.zipCode,
+            addressFileBytes: updatedForm.addressFileBytes,
+            addressFileName: updatedForm.addressFileName,
+            accountHolderName: _nameCtrl.text,
+            accountNumber: _accountCtrl.text,
+            bank: _bankCtrl.text,
+            payoutSchedule: updatedForm.payoutSchedule ?? '',
+          );
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        await Supabase.instance.client
+            .from('spaces')
+            .update({'status': 'active'})
+            .eq('owner_id', userId)
+            .eq('status', 'draft');
+      }
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRouter.dashboard,
+          (_) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit KYC: ${e.toString()}'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -99,7 +212,6 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon header
                   Center(
                     child: Stack(
                       alignment: Alignment.center,
@@ -171,7 +283,6 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
                     ),
                   ),
                   const SizedBox(height: 28),
-
                   const Text('Payment Verification',
                       style: TextStyle(
                           fontSize: 15,
@@ -182,7 +293,6 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
                       style: TextStyle(
                           fontSize: 13, color: AppColors.textSecondary)),
                   const SizedBox(height: 20),
-
                   _label('Account Holder Name'),
                   const SizedBox(height: 6),
                   _textField(
@@ -194,7 +304,6 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
                   if (_submitted && _nameCtrl.text.isEmpty)
                     _errorText('Account holder name is required'),
                   const SizedBox(height: 16),
-
                   _label('Account Number'),
                   const SizedBox(height: 6),
                   _textField(
@@ -207,48 +316,102 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
                   if (_submitted && _accountCtrl.text.isEmpty)
                     _errorText('Account number is required'),
                   const SizedBox(height: 16),
-
                   _label('Bank'),
                   const SizedBox(height: 6),
-                  DropdownButtonFormField<String>(
-                    value: form.bank,
-                    hint: const Text('Choose bank',
-                        style:
-                            TextStyle(color: AppColors.textHint, fontSize: 13)),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: _submitted && form.bank == null
-                          ? const Color(0xFFFFF5F5)
-                          : Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 13),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                              color: _submitted && form.bank == null
+                  Column(
+                    children: [
+                      TextField(
+                        controller: _bankCtrl,
+                        onChanged: _onBankChanged,
+                        style: const TextStyle(
+                            fontSize: 13, color: AppColors.textPrimary),
+                        decoration: InputDecoration(
+                          hintText: 'Search or type your bank name',
+                          hintStyle: const TextStyle(
+                              fontSize: 13, color: AppColors.textHint),
+                          filled: true,
+                          fillColor: _submitted && _bankCtrl.text.isEmpty
+                              ? const Color(0xFFFFF5F5)
+                              : Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 13),
+                          border: OutlineInputBorder(
+                            borderRadius: _showBankSuggestions
+                                ? const BorderRadius.vertical(
+                                    top: Radius.circular(8))
+                                : BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _submitted && _bankCtrl.text.isEmpty
                                   ? Colors.red
-                                  : AppColors.border)),
-                      enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(
-                              color: _submitted && form.bank == null
+                                  : AppColors.border,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: _showBankSuggestions
+                                ? const BorderRadius.vertical(
+                                    top: Radius.circular(8))
+                                : BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _submitted && _bankCtrl.text.isEmpty
                                   ? Colors.red
-                                  : AppColors.border)),
-                    ),
-                    items: _banks
-                        .map((e) => DropdownMenuItem(
-                            value: e,
-                            child:
-                                Text(e, style: const TextStyle(fontSize: 13))))
-                        .toList(),
-                    onChanged: (v) => ref
-                        .read(kycFormProvider.notifier)
-                        .updatePayment(bank: v),
+                                  : AppColors.border,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: _showBankSuggestions
+                                ? const BorderRadius.vertical(
+                                    top: Radius.circular(8))
+                                : BorderRadius.circular(8),
+                            borderSide: BorderSide(
+                              color: _submitted && _bankCtrl.text.isEmpty
+                                  ? Colors.red
+                                  : AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_showBankSuggestions)
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: const BorderRadius.vertical(
+                                bottom: Radius.circular(8)),
+                            border: Border.all(color: AppColors.border),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            itemCount: _bankSuggestions.length,
+                            itemBuilder: (_, i) => Material(
+                              color: Colors.white,
+                              child: InkWell(
+                                onTap: () => _selectBank(_bankSuggestions[i]),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 14, vertical: 12),
+                                  child: Text(_bankSuggestions[i],
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.textPrimary)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  if (_submitted && form.bank == null)
-                    _errorText('Please select a bank'),
+                  if (_submitted && _bankCtrl.text.isEmpty)
+                    _errorText('Please enter your bank name'),
                   const SizedBox(height: 16),
-
                   _label('Payout Schedule'),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
@@ -288,7 +451,6 @@ class _KycStep3PaymentState extends ConsumerState<KycStep3Payment>
                   ),
                   if (_submitted && form.payoutSchedule == null)
                     _errorText('Please select a payout schedule'),
-
                   const SizedBox(height: 32),
                   obBottomBar(
                     onBack: () => ref.read(kycStepProvider.notifier).state = 1,

@@ -63,3 +63,14 @@ class AuthNotifier extends AsyncNotifier<void> {
 
 final authNotifierProvider =
     AsyncNotifierProvider<AuthNotifier, void>(AuthNotifier.new);
+final currentUserProfileProvider =
+    FutureProvider<Map<String, dynamic>?>((ref) async {
+  final user = Supabase.instance.client.auth.currentUser;
+  if (user == null) return null;
+  final response = await Supabase.instance.client
+      .from('profiles')
+      .select()
+      .eq('id', user.id)
+      .single();
+  return response;
+});

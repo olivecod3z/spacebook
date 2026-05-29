@@ -1,6 +1,9 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:spacebook/features/onboarding/providers/space_repo_provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/ob_bottom_bar.dart';
 import '../../../core/constants/app_colors.dart';
 import '../providers/space_form_provider.dart';
@@ -21,6 +24,7 @@ class _Step3dAmenitiesState extends ConsumerState<Step3dAmenities>
   late AnimationController _animCtrl;
   late Animation<Offset> _slideAnim;
   late Animation<double> _fadeAnim;
+  bool _isPublishing = false;
 
   final List<String> _amenities = [
     'AC',
@@ -58,15 +62,95 @@ class _Step3dAmenitiesState extends ConsumerState<Step3dAmenities>
   Future<void> _pickImages() async {
     final picker = ImagePicker();
     final picked = await picker.pickMultiImage();
-    if (picked.isNotEmpty) setState(() => _images.addAll(picked));
+    if (picked.isNotEmpty) {
+      setState(() {
+        _images.clear();
+        _images.addAll(picked.take(5)); // max 5 photos
+      });
+    }
   }
 
-  void _publish() {
+  Future<List<String>> _uploadImages(String spaceId) async {
+    final client = Supabase.instance.client;
+    final List<String> urls = [];
+
+    for (int i = 0; i < _images.length; i++) {
+      final bytes = await _images[i].readAsBytes();
+      final fileName = '$spaceId/photo_$i.jpg';
+
+      await client.storage.from('space-photos').uploadBinary(
+            fileName,
+            bytes,
+            fileOptions: const FileOptions(
+              contentType: 'image/jpeg',
+              upsert: true,
+            ),
+          );
+
+      final url = client.storage.from('space-photos').getPublicUrl(fileName);
+      urls.add(url);
+    }
+
+    return urls;
+  }
+
+  Future<void> _publish() async {
+    if (_isPublishing) return;
+    setState(() => _isPublishing = true);
+
     ref.read(spaceFormProvider.notifier).update((s) => s.copyWith(
           amenities: List.from(_selectedAmenities),
           spaceRules: _rulesCtrl.text.trim(),
         ));
-    ref.read(obStepProvider.notifier).state = 6;
+
+    final form = ref.read(spaceFormProvider);
+
+    try {
+      // Always create a new space
+      final spaceId = await ref.read(spaceRepositoryProvider).createSpace(
+            title: form.spaceName,
+            spaceType: form.spaceType ?? '',
+            description: form.description,
+            capacity: form.capacity ?? '0',
+            streetAddress: form.streetAddress,
+            city: form.city ?? '',
+            state: form.state ?? '',
+            zipCode: form.zipCode,
+            hourlyRate: double.tryParse(form.hourlyRate) ?? 0,
+            minimumHours: int.tryParse(form.minHours) ?? 1,
+            availableDays: form.availableDays,
+            availableFrom: form.availableFrom ?? '',
+            availableUntil: form.availableUntil ?? '',
+            amenities: List.from(_selectedAmenities),
+            rules: _rulesCtrl.text.trim(),
+            status: 'draft',
+          );
+
+      // Upload photos and update space with URLs
+      if (_images.isNotEmpty) {
+        final photoUrls = await _uploadImages(spaceId);
+        await ref.read(spaceRepositoryProvider).updateSpace(
+          spaceId: spaceId,
+          updates: {'photos': photoUrls},
+        );
+      }
+
+      if (mounted) {
+        ref.read(obStepProvider.notifier).state = 6;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save space: ${e.toString()}'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPublishing = false);
+    }
   }
 
   @override
@@ -229,7 +313,7 @@ class _Step3dAmenitiesState extends ConsumerState<Step3dAmenities>
                   ),
                   const SizedBox(height: 16),
                   _label(
-                      'Upload High-Quality Images Of Your Space (minimum 5 photos)'),
+                      'Upload High-Quality Images Of Your Space (maximum 5 photos)'),
                   const SizedBox(height: 6),
                   GestureDetector(
                     onTap: _pickImages,
@@ -266,6 +350,75 @@ class _Step3dAmenitiesState extends ConsumerState<Step3dAmenities>
                               style: TextStyle(
                                   fontSize: 11, color: AppColors.textHint)),
                           if (_images.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: 80,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                itemCount: _images.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  return Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: FutureBuilder<List<int>>(
+                                          future: _images[index]
+                                              .readAsBytes()
+                                              .then((b) => b.toList()),
+                                          builder: (context, snapshot) {
+                                            if (snapshot.hasData) {
+                                              return Image.memory(
+                                                Uint8List.fromList(
+                                                    snapshot.data!),
+                                                width: 80,
+                                                height: 80,
+                                                fit: BoxFit.cover,
+                                              );
+                                            }
+                                            return Container(
+                                              width: 80,
+                                              height: 80,
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF4F5F7),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                              ),
+                                              child: const Icon(
+                                                  Icons.image_outlined,
+                                                  color: AppColors.textHint),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                      if (index == 0)
+                                        Positioned(
+                                          bottom: 4,
+                                          left: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.primary,
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: const Text('Cover',
+                                                style: TextStyle(
+                                                    fontSize: 9,
+                                                    color: Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w600)),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Text('${_images.length} photo(s) selected',
                                 style: const TextStyle(
@@ -280,8 +433,9 @@ class _Step3dAmenitiesState extends ConsumerState<Step3dAmenities>
                   const SizedBox(height: 32),
                   obBottomBar(
                     onBack: () => ref.read(obStepProvider.notifier).state = 4,
-                    onContinue: _publish,
-                    continueLabel: 'Publish Your Space',
+                    onContinue: _isPublishing ? () {} : _publish,
+                    continueLabel:
+                        _isPublishing ? 'Publishing...' : 'Publish Your Space',
                   ),
                 ],
               ),

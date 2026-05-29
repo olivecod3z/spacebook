@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../providers/auth_provider.dart';
+import '../../../features/auth/screens/verify_email_screen.dart';
 import 'onboarding_screen.dart';
 
 class Step2Personal extends ConsumerStatefulWidget {
@@ -74,7 +75,19 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
 
       if (!mounted) return;
       if (success) {
-        ref.read(obStepProvider.notifier).state = 2;
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => VerifyEmailScreen(
+              email: _emailCtrl.text.trim(),
+              password: _passwordCtrl.text.trim(), // add this
+              onConfirmed: () {
+                if (!mounted) return;
+                Navigator.of(context).pop();
+                ref.read(obStepProvider.notifier).state = 2;
+              },
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (!mounted) return;
@@ -213,7 +226,8 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
               const SizedBox(height: 14),
               _field('Last Name', 'Enter name', _lastNameCtrl),
               const SizedBox(height: 14),
-              _field('Phone Number', 'Enter phone number', _phoneCtrl,
+              _field(
+                  'Booking Contact', 'Enter booking contact number', _phoneCtrl,
                   type: TextInputType.phone),
               const SizedBox(height: 14),
               _field('Email Address', 'Enter your email address', _emailCtrl,

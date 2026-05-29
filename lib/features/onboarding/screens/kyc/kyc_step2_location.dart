@@ -145,7 +145,6 @@ class _KycStep2LocationState extends ConsumerState<KycStep2Location>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Icon header
                   Center(
                     child: Stack(
                       alignment: Alignment.center,
@@ -218,11 +217,20 @@ class _KycStep2LocationState extends ConsumerState<KycStep2Location>
                   ),
                   const SizedBox(height: 28),
 
-                  const Text('Location',
+                  // ── Updated section heading ──
+                  const Text('Your Residential Address',
                       style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                           color: AppColors.textPrimary)),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'This is where you live — not the address of your space. We use this to verify your identity.',
+                    style: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                        height: 1.5),
+                  ),
                   const SizedBox(height: 20),
 
                   _label('Street Address'),
@@ -231,7 +239,7 @@ class _KycStep2LocationState extends ConsumerState<KycStep2Location>
                     controller: _streetCtrl,
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
-                      hintText: 'Street address',
+                      hintText: 'Enter your home street address',
                       hintStyle: const TextStyle(
                           color: AppColors.textHint, fontSize: 13),
                       prefixIcon: const Icon(Icons.location_on_outlined,
