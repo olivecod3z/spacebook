@@ -13,6 +13,7 @@ class Step2Personal extends ConsumerStatefulWidget {
 }
 
 class _Step2PersonalState extends ConsumerState<Step2Personal> {
+  final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -20,7 +21,7 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
   final _passwordCtrl = TextEditingController();
   bool _obscure = true;
   bool _submitted = false;
-  String? _emailError;
+  String? _serverEmailError;
 
   bool get _hasLength =>
       _passwordCtrl.text.length >= 8 && _passwordCtrl.text.length <= 20;
@@ -48,19 +49,24 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
     super.dispose();
   }
 
+  bool _isValidEmail(String email) {
+    if (email.indexOf('@') != email.lastIndexOf('@')) return false;
+    return RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$')
+        .hasMatch(email);
+  }
+
+  bool _isValidPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'[\s\-\(\)\+]'), '');
+    return RegExp(r'^\d{7,15}$').hasMatch(digits);
+  }
+
   Future<void> _continue() async {
     setState(() {
       _submitted = true;
-      _emailError = null;
+      _serverEmailError = null;
     });
 
-    if (_firstNameCtrl.text.isEmpty ||
-        _lastNameCtrl.text.isEmpty ||
-        _emailCtrl.text.isEmpty ||
-        _passwordCtrl.text.isEmpty ||
-        !_passwordValid) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     final fullName =
         '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}';
@@ -96,7 +102,8 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
       if (err.contains('already registered') ||
           err.contains('already exists') ||
           err.contains('duplicate')) {
-        setState(() => _emailError = 'This email is already in use.');
+        setState(() => _serverEmailError = 'This email is already in use.');
+        _formKey.currentState!.validate();
       } else if (err.contains('phone')) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -140,7 +147,9 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
+          child: Form(
+            key: _formKey,
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Stack(
@@ -222,16 +231,46 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
                 ),
               ),
               const SizedBox(height: 28),
-              _field('First Name', 'Enter name', _firstNameCtrl),
+              _field('First Name', 'Enter name', _firstNameCtrl,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'First name is required'
+                      : null),
               const SizedBox(height: 14),
-              _field('Last Name', 'Enter name', _lastNameCtrl),
+              _field('Last Name', 'Enter name', _lastNameCtrl,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Last name is required'
+                      : null),
               const SizedBox(height: 14),
               _field(
                   'Booking Contact', 'Enter booking contact number', _phoneCtrl,
-                  type: TextInputType.phone),
+                  type: TextInputType.phone,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Phone number is required';
+                    }
+                    if (!_isValidPhone(v.trim())) {
+                      return 'Enter a valid phone number (7–15 digits)';
+                    }
+                    return null;
+                  }),
               const SizedBox(height: 14),
               _field('Email Address', 'Enter your email address', _emailCtrl,
-                  type: TextInputType.emailAddress, externalError: _emailError),
+                  type: TextInputType.emailAddress,
+                  onChanged: (_) {
+                    if (_serverEmailError != null) {
+                      setState(() => _serverEmailError = null);
+                    }
+                  },
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Email address is required';
+                    }
+                    if (!_isValidEmail(v.trim())) {
+                      return 'Enter a valid email address';
+                    }
+                    if (_serverEmailError != null) return _serverEmailError;
+                    return null;
+                  }),
               const SizedBox(height: 4),
               const Align(
                 alignment: Alignment.centerLeft,
@@ -251,7 +290,14 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
                       size: 18,
                     ),
                     onPressed: () => setState(() => _obscure = !_obscure),
-                  )),
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Password is required';
+                    if (!_passwordValid) {
+                      return 'Password does not meet all requirements below';
+                    }
+                    return null;
+                  }),
               if (_passwordCtrl.text.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 _PasswordConditions(
@@ -309,6 +355,7 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
                 ],
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -322,10 +369,10 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
     TextInputType type = TextInputType.text,
     bool obscure = false,
     Widget? suffix,
-    String? externalError,
+    String? Function(String?)? validator,
+    void Function(String)? onChanged,
   }) {
-    final isEmpty = _submitted && ctrl.text.isEmpty;
-    final hasError = isEmpty || externalError != null;
+    final hasError = _submitted && (validator?.call(ctrl.text) != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,9 +387,12 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
           controller: ctrl,
           keyboardType: type,
           obscureText: obscure,
-          onChanged: (_) => setState(() {
-            if (externalError != null) _emailError = null;
-          }),
+          validator: validator,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          onChanged: (v) {
+            setState(() {});
+            onChanged?.call(v);
+          },
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 13),
@@ -366,20 +416,17 @@ class _Step2PersonalState extends ConsumerState<Step2Personal> {
               borderSide: BorderSide(
                   color: hasError ? Colors.red : AppColors.primary, width: 1.5),
             ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+            errorStyle: const TextStyle(fontSize: 11, color: Colors.red),
           ),
         ),
-        if (isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text('$label is required',
-                style: const TextStyle(fontSize: 11, color: Colors.red)),
-          ),
-        if (!isEmpty && externalError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(externalError,
-                style: const TextStyle(fontSize: 11, color: Colors.red)),
-          ),
       ],
     );
   }
